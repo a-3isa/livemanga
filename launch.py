@@ -1,0 +1,160 @@
+from inference_color import colorize_single_image
+from colorizator import MangaColorizator
+import os
+from pathlib import Path
+from split_manga import search_split,cut_panels
+from PIL import Image
+import numpy as np
+from inference_text import TextDetector
+import torch
+from utils import utils_image as util
+from models.network_rrdbnet import RRDBNet as net
+import shutil
+import torchaudio
+from TTS.tts.configs.xtts_config import XttsConfig
+from TTS.tts.models.xtts import Xtts
+from paddleocr import PaddleOCR
+from gramformer import Gramformer
+from inference_text import model2annotations
+
+
+
+v3=["Dwayne Johnson.wav","Oprah Winfrey.wav","sher.wav"]
+v7=["Dwayne Johnson.wav","Oprah Winfrey.wav","sher.wav","Denzel Washington.wav",
+    "Morgan Freeman.wav","nar.wav","stevo.wav"]
+v9=["Dwayne Johnson.wav","Oprah Winfrey.wav","sher.wav","Denzel Washington.wav",
+    "Morgan Freeman.wav","nar.wav","stevo.wav","alpachino.wav","deep.wav"]
+
+class liveManga():
+    def __init__(self,PaddleOCR,model2annotations,Gramformer):
+        self.gf = Gramformer(models = 1, use_gpu=False)
+        self.images_path,self.voices_path,self.videos_path="images/","audio/","video/"
+        config = XttsConfig()
+        config.load_json("XTTS_ft_colab/config.json")
+        self.voicemodel = Xtts.init_from_config(config)
+        self.voicemodel.load_checkpoint(config, checkpoint_dir="XTTS_ft_colab")
+        # self.voicemodel.cuda()
+        self.colorizer = MangaColorizator('cpu', 'networks/generator.zip')
+        self.ocr = PaddleOCR(use_angle_cls=True, lang="en",show_log=False)
+        self.model2annotations=model2annotations
+        cuda = torch.cuda.is_available()
+        device = 'cuda' if cuda else 'cpu'
+        self.model = TextDetector(model_path="comictextdetector.pt", input_size=1024, device=device) 
+        self.upscalemodel = net(in_nc=3, out_nc=3, nf=64, nb=23, gc=32, sf=4)  # define network
+        self.upscalemodel.load_state_dict(torch.load("BSRGAN.pth"), strict=True)
+        self.upscalemodel.eval()
+        for k, v in self.upscalemodel.named_parameters():
+                    v.requires_grad = False
+        # self.upscalemodel = self.upscalemodel.to(device)  
+
+    def work(self,anime_name,chapter_name,voices_number):
+        if voices_number == '3' :
+            voices=v3
+        elif voices_number == '7' :
+            voices=v7
+        else :
+            voices=v9
+        try:
+            os.makedirs('txt')
+        except:
+            shutil.rmtree('txt')
+            os.mkdir('txt')
+        try:
+            os.makedirs(f"media/{anime_name}/{chapter_name}")
+        except:
+            pass
+            
+        in_dir=f"inp/{anime_name}_{chapter_name}_{voices_number}/"
+        while True:
+            for img in os.listdir(in_dir):
+                print(img)
+                name=img
+                page=0
+                im_name=img.replace(Path(img).suffix, '')
+                ext = os.path.splitext(img)[1].lower()
+                colorization= colorize_single_image(in_dir+img, self.colorizer)
+                print("Colorized")
+                im = Image.fromarray((colorization* 255).astype(np.uint8))
+                imGrey = im.convert("L")
+                case2split = search_split(imGrey)
+                im2sav = cut_panels(im, case2split)
+                for num, i2s in enumerate(im2sav):
+                    if i2s.size[1] < 20 or i2s.size[0] < 20 :
+                        print("corrupted scene")
+                    else:
+                        img=np.array(i2s)
+                        self.model2annotations(self.model,self.ocr,self.gf,img,im_name, page)
+                        print("Scenario extracted")
+                        try:
+                            os.mkdir(f"media/{anime_name}/{chapter_name}/{im_name}_{page}")
+                        except:
+                            print("Scene folder already exist")
+                        
+                        for reader_voice in voices:
+                            gpt_cond_latent, speaker_embedding = self.voicemodel.get_conditioning_latents(audio_path=[f'./reader_voices/{reader_voice}'])
+                            try:
+                                       
+                                with open (f'txt/{im_name}_{page}.txt',"r") as f :
+                                            text=f.read()
+                                            # print(text)
+                                            out = self.voicemodel.inference(
+                                                    text,
+                                                    "en",
+                                                    gpt_cond_latent,
+                                                    speaker_embedding,
+                                                    temperature=0.7, # Add custom parameters here
+                                                )
+                                            torchaudio.save(f"media/{anime_name}/{chapter_name}/{im_name}_{page}/{reader_voice.split('.')[0]}.mp3",
+                                                            torch.tensor(out["wav"]).unsqueeze(0), 24000)
+                                            print(reader_voice.split('.')[0])
+                                            
+                            except:
+                                print(f'{im_name}_{page}.txt is empty')
+                        
+                        print("Saving scene")
+                        i2s.save("media/{}/{}/{}_{}/{}_{}{}".format(anime_name,chapter_name, im_name, page,im_name, page,ext))
+                        # print("Saving 22")
+
+                        img_L = util.imread_uint("media/{}/{}/{}_{}/{}_{}{}".format(anime_name,chapter_name, im_name, page,im_name, page,ext), n_channels=3)
+                        # print("Saving sc33ene")
+
+                        img_L = util.uint2tensor4(img_L)
+                        # print("Saving 44")
+
+                        img_L = img_L.to('cpu')
+                        # print("Saving 1111")
+
+                        img_E = self.upscalemodel(img_L)
+                        # print("Saving 333")
+
+                        img_E = util.tensor2uint(img_E)
+                        util.imsave(img_E,"media/{}/{}/{}_{}/{}_{}{}".format(anime_name,chapter_name, im_name, page,im_name, page,ext))
+                        page = page +1
+
+                        try:
+                            os.remove(f'txt/{im_name}_{page}.txt')
+                        except:
+                            print(f'txt/{im_name}_{page}.txt not found ')    
+                os.remove(f"{in_dir}/{name}")
+
+            if len(os.listdir(in_dir)) == 0: 
+                break 
+            else: 
+                pass
+            
+        for folder in['txt',in_dir]:
+                    shutil.rmtree(folder)
+        print(f"{i.split('_')[0]} {i.split('_')[1]} is finished")
+
+if __name__ == "__main__" :
+     live=liveManga(PaddleOCR,model2annotations,Gramformer)
+     while True:
+        try :
+            folders = os.listdir('inp')
+            for i in folders:
+                live.work(i.split("_")[0],i.split("_")[1],i.split("_")[2])  
+        except:
+            print("Error retrying")
+             
+            
+     
