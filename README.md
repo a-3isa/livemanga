@@ -1,91 +1,58 @@
 # LiveManga
 
-A comprehensive manga processing and live translation system that combines OCR, colorization, text detection, and translation capabilities for manga images.
+A manga processing pipeline with a Django REST backend and a Flutter client. It takes raw manga pages and produces enhanced, colorized, readable-aloud versions.
 
-## Features
+## What it does
 
-- **Text Detection**: Advanced OCR and text detection using deep learning models
-- **Colorization**: Automatic manga colorization with pre-trained models
-- **Image Processing**: Denoising, upscaling, and enhancement utilities
-- **Web Interface**: Django-based backend for processing and serving manga content
-- **Mobile App**: Flutter frontend for mobile manga reading and processing
-- **Database Integration**: SQLite database for storing manga data and metadata
-- **API Endpoints**: RESTful API for manga processing operations
+- **Panel splitting** of manga pages
+- **Text detection and OCR** (YOLOv5-based detection, PaddleOCR)
+- **Grammar correction** of recognised text (Gramformer)
+- **Text-to-speech** with multiple voices (XTTS)
+- **Colorization** of black-and-white pages
+- **Upscaling** (BSRGAN) and denoising
+- **REST API** (Django REST Framework) consumed by the Flutter app at the repository root
 
-## Project Structure
+Translation is not implemented.
 
-- `livemanga/`: Django backend application
-- `manga/`: Manga processing scripts and utilities
-- `models/`: Pre-trained neural network models
-- `networks/`: Network architectures and weights
-- `utils/`: Utility functions for image processing, OCR, and more
-- `denoising/`: Image denoising models and functions
-- `html/`: Generated documentation
-- `media/`: Processed manga images and assets
+## Project structure
 
-## Installation
+- `livemanga/` Django project and API
+- `manga/` page-processing scripts
+- `models/`, `networks/`, `denoising/` model code and weights locations
+- `utils/` image and OCR helpers
+- `launch.py` runs the processing pipeline
+- `lib/` (and platform folders) Flutter app
 
-### Prerequisites
+## Setup
 
-- Python 3.8+
-- Flutter SDK (for mobile app)
-- Git
+Prerequisites: Python 3.8+, a CUDA-capable GPU recommended, Flutter SDK for the app.
 
-### Backend Setup
+```bash
+git clone https://github.com/a-3isa/livemanga
+cd livemanga
+pip install django djangorestframework pillow opencv-python torch torchvision numpy
+# plus the OCR/TTS stack: paddleocr, TTS (XTTS), gramformer
+python manage.py migrate
+python manage.py runserver
+```
 
-1. Clone the repository
-2. Navigate to the project directory
-3. Install Python dependencies:
-   ```bash
-   pip install django djangorestframework pillow opencv-python torch torchvision numpy
-   ```
-4. Run database migrations:
-   ```bash
-   python manage.py migrate
-   ```
-5. Start the Django server:
-   ```bash
-   python manage.py runserver
-   ```
+Pre-trained model weights are required for detection, colorization, upscaling and TTS; place them in the directories above (they are not all included in the repository).
 
-### Mobile App Setup
+Run the pipeline: put pages in `inp/`, then
 
-1. Ensure Flutter is installed
-2. Navigate to the project directory
-3. Install Flutter dependencies:
-   ```bash
-   flutter pub get
-   ```
-4. Run the app:
-   ```bash
-   flutter run
-   ```
+```bash
+python launch.py
+```
 
-## Usage
+Flutter app:
 
-1. Place manga images in the `inp/` directory
-2. Run the processing pipeline:
-   ```bash
-   python launch.py
-   ```
-3. Access the web interface at `http://localhost:8000`
-4. Use the mobile app for on-the-go processing
+```bash
+flutter pub get
+flutter run
+```
 
-## Models and Networks
-
-The project includes several pre-trained models:
-
-- Text detection models in `models/yolov5/`
-- Colorization models in `networks/`
-- Denoising models in `denoising/models/`
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+Point the app at your backend URL. Do not rely on `public_url.txt`; it holds a stale tunnel address from development.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT. See the LICENSE file.
