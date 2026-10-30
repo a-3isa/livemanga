@@ -18,6 +18,22 @@ class MangaSerializer(serializers.ModelSerializer):
         # return images
     image = serializers.ListField(child=serializers.ImageField())
 
+    # anime_name and chapter_name become directory names under media/ and inp/,
+    # so they must not be able to climb out of them ("../", absolute paths).
+    @staticmethod
+    def _safe_path_part(value):
+        if (not value or value != value.strip() or value.startswith('.')
+                or any(c in value for c in '/\\:') or '..' in value):
+            raise serializers.ValidationError(
+                'Use a plain name without slashes, colons or "..".')
+        return value
+
+    def validate_anime_name(self, value):
+        return self._safe_path_part(value)
+
+    def validate_chapter_name(self, value):
+        return self._safe_path_part(value)
+
     def save(self, path):
         images = self.validated_data['image']
         save_path = path.strip("/")
