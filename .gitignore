@@ -42,3 +42,17 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Python and Django
+__pycache__/
+*.py[co]
+.venv/
+venv/
+db.sqlite3
+
+# Environment files: only the example is committed
+.env
+.env.*
+!.env.example
+*.pem
+*.key
