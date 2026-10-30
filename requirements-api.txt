@@ -1,5 +1,5 @@
 # The Django REST API only. The OCR, colourisation and text-to-speech
 # pipeline has its own, much heavier dependencies (see README).
 Django>=5.2.17
-djangorestframework>=3.18.2
+djangorestframework>=3.18.3
 Pillow>=10
