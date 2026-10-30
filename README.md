@@ -1,5 +1,7 @@
 # LiveManga
 
+[![CI](https://github.com/a-3isa/livemanga/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/a-3isa/livemanga/actions/workflows/ci.yml)
+
 A manga processing pipeline with a small Django REST API. It takes raw manga pages and produces enhanced, colourised, read-aloud versions; a Flutter client (not in this repository) uploads chapters through the API.
 
 ## What it does
